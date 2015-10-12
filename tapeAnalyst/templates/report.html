@@ -1,13 +1,20 @@
-<!DOCTYPE html>
-<html>
-<head lang="en">
-    <meta charset="UTF-8">
-    <title>{{ title }}</title>
+{% extends "base.html" %}
+{% block content %}
 
-</head>
-<body>
-{% if mygraph != None %}
-<img src="data:image/png;base64,{{ mygraph }}"\>
+<h1>Gel Summary {{ date }}</h1>
+
+{%if fullGelPlot != None %}
+    <img src="data:image/png;base64,{{ fullGelPlot }}"/>
 {% endif %}
-</body>
-</html>
+
+{% for row in rows %}
+    <h2>Lane {{ row['lane'] }}</h2>
+    <p><strong>Well ID:</strong> {{ row['wellID'] }}</p>
+    <p><strong>Description:</strong> {{ row['description'] }}</p>
+
+    {%if row['lanePlot'] != None %}
+        <img src="data:image/png;base64,{{ row['figdata_png'] }}"/>
+    {% endif %}
+
+{% endfor %}
+{% endblock content %}
