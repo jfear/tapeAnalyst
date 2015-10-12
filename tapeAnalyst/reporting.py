@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal as signal
 
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, PackageLoader
 import base64
 from io import BytesIO
 
@@ -46,8 +46,7 @@ class HtmlReport():
 
         # Iterate over lanes and make report, skip lanes that are ladders
         # because I am adding the ladders seperately
-        #output = df[df['description'].str.lower() != 'ladder'].apply(lambda row: self.build_output(row, gel), axis=1)
-        output = df[:3].apply(lambda row: self.build_output(row, gel), axis=1)
+        output = df[df['description'].str.lower() != 'ladder'].apply(lambda row: self.build_output(row, gel), axis=1)
         self.htmlOut = output.values.tolist()
 
         # build HTML report
@@ -102,7 +101,7 @@ class HtmlReport():
     def build_report(self):
         """ """
         # Set up jinja2 template environment
-        env = Environment(loader=FileSystemLoader('./templates'))
+        env = Environment(loader=PackageLoader('tapeAnalyst', 'templates'))
         template = env.get_template("report.html")
 
         return template.render(date=TODAY, fullGelPlot=self.fullGelPlot, rows=self.htmlOut)

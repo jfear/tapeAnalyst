@@ -19,9 +19,7 @@ def getOptions():
     parser.add_argument('-o', '--output', dest='oname', action='store', required=True, help='The name of HTML output file [Required].')
     parser.add_argument('--range', dest='range', action='store', required=False, default=None, help='Range for fragment size for doing quality assesment.')
 
-    args = parser.parse_args(['--gel', '../data/JH_2.png', 
-                              '--sample', '../data/JH_sample.csv',
-                              '-o', '../data/JH_report.html'])
+    args = parser.parse_args()
     return args
 
 def main(args):
