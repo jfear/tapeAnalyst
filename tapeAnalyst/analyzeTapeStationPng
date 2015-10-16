@@ -1,14 +1,15 @@
 #!/usr/bin/env python
-
 # Built-in
 import argparse
+import logging
+import sys
 
 # 3rd Party
 import numpy as np
 import pandas as pd
 
 # tapeAnalyst
-import tapeAnalyst.reporting as reporting
+#import tapeAnalyst.reporting as reporting
 from tapeAnalyst.gel_processing import TapeStationGel
 
 def getOptions():
@@ -22,40 +23,52 @@ def getOptions():
     args = parser.parse_args()
     return args
 
+def getLogger():
+    # Set different streams of STDOUT and STDERR
+    sout = logging.StreamHandler(stream=sys.stdout)
+    serr = logging.StreamHandler(stream=sys.stderr)
+
+    # Set log levels for different handler
+    sout.setLevel(logging.INFO)
+    serr.setLevel(logging.ERROR)
+
+    # Add Handlers to common logger
+    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level='INFO', handlers=[sout, serr])
+    logger = logging.getLogger()
+
+    return logger
+
+
 def main(args):
-    """ """
-
-    #
     # Import Sample Information
-    #
     try:
-        dfSample = pd.read_csv(args.sname)
-    except:
-        # Windows encode needs ISO specified
+        # TapeAnalyst is a Windows program and it encodes CSV files using the
+        # windows style ISO 
         dfSample = pd.read_csv(args.sname, encoding = "ISO-8859-1")
-
-    dfSample.columns = ['wellID', 'conc', 'description', 'alert', 'notes']
-
-    # Add a new column with the index row indices
-    dfSample.reset_index(inplace=True)
-
-    # Check sample sheet to see if there is a ladder
-    try:
-        ladder = dfSample[dfSample['description'].str.lower() == 'ladder'].index
     except:
-        ladder = None
+        # If that fails then try to import without ISO info.
+        dfSample = pd.read_csv(args.sname)
+        logger.warn('Was unable to read sample sheet using Windows specific ISO.')
+    finally:
+        if dfSample.shape[1] == 5:
+            dfSample.columns = ['wellID', 'conc', 'description', 'alert', 'notes']
 
-    # If no ladder then set to None
-    if not ladder.any():
-        ladder = None
+            # Get row indices by reseting the index. This will add a new column with 0 - N indices.
+            dfSample.reset_index(inplace=True)
+        else:
+            logger.error('Check formating of the formating of the sample sheet. ' +
+                         'There should be 5 columns with columns for: \
+                            * Well ID \
+                            * Conc. [pg/µl] \
+                            * Sample Description \
+                            * Alert \
+                            * Observations')
+            raise IndexError
 
-    #
+
     # Process gel image
-    #
-    gel = TapeStationGel(args.gname, ladder)
+    gel = TapeStationGel(args.gname, dfSample)
 
-    # Generate gray scale intensity values for each lane
-    gel.generateGrayIntensities()
 
     #TODO: Add addittion filtering/convolution steps here if needed
 
@@ -64,12 +77,11 @@ def main(args):
     #
     # Generate and output HTML report
     #
-    html = reporting.HtmlReport(gel, dfSample)
-    html.write(args.oname)
+    #html = reporting.HtmlReport(gel, dfSample)
+    #html.write(args.oname)
 
 
 if __name__ == '__main__':
-
     args = getOptions()
-
+    logger = getLogger()
     main(args)
