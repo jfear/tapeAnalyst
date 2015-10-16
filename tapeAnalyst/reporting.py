@@ -8,7 +8,6 @@ import pickle
 # 3rd Party
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy import signal as signal
 
 from jinja2 import Environment, PackageLoader
 import base64
@@ -116,21 +115,6 @@ class HtmlReport():
         with open(fname, 'w') as OUT:
             OUT.write(self.rendered)
 
-    def get_molecular_weights(self):
-        """ """
-        # Take mean across ladder
-        his = self.ladderGel.mean(axis=1)
-
-        # Set hard filter help make peaks stand out
-        his[his < 0.4] = 0
-
-        # Find Peaks
-        self.peaks = signal.find_peaks_cwt(his, widths=np.arange(3, 5))
-        if len(self.peaks) < 10:
-            self.peaks = None
-        
-        # Molecular Weights
-        self.weights = ['1500', '1000', '700', '500', '400', '300', '200', '100', '50', '25']
     
     def addMW_Y(self, ax):
         if not self.peaks is None:
