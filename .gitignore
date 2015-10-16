@@ -1,5 +1,2 @@
 # Compiled python modules.
 *.pyc
-
-# Ignore testing data folder
-data/
