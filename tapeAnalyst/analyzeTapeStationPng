@@ -3,6 +3,7 @@
 import argparse
 import logging
 import sys
+import pickle
 
 # 3rd Party
 import numpy as np
@@ -11,6 +12,7 @@ import pandas as pd
 # tapeAnalyst
 #import tapeAnalyst.reporting as reporting
 from tapeAnalyst.gel_processing import TapeStationGel
+import tapeAnalyst.analysis as taa
 
 def getOptions():
     """ Function to pull in command line arguments. """
@@ -69,7 +71,16 @@ def main(args):
     # Process gel image
     gel = TapeStationGel(args.gname, dfSample)
 
+    pickle.dump(gel, open('data/gel.pkl', 'wb'))
+    exit()
 
+    # Get list of ladders
+    ladders = taa.getLadder(gel.lanes)
+
+    if ladders is not None:
+        # Construct MW interperlator to estimate molecular weights
+        interpMW = taa.interpMW()
+    
     #TODO: Add addittion filtering/convolution steps here if needed
 
     #TODO: Add stats here

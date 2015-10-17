@@ -2,7 +2,6 @@
 import numpy as np
 from skimage import io, color
 from scipy import signal as signal
-import pickle
 
 class TapeStationGel():
     """ Class for handling Tape Station Gels.
@@ -21,8 +20,9 @@ class TapeStationGel():
         :param self.grayGel: gray scale representation of gel as a 2d matrix.
         :type self.grayGel: numpy.ndarray
 
-        :param self.ladder: Location of ladder if present
-        :type self.ladder: int
+        :param self.dyeGel: Gel image containing only the dye front and dye
+            end.
+        :type self.dyeGel: numpy.ndarray
 
         :param self.gelTop: Location of the top of the gel (Purple band).
         :type self.gelTop: int
@@ -36,9 +36,8 @@ class TapeStationGel():
         :param self.gelRigth: Location of the right of the gel (Green and Purple band).
         :type self.gelRigth: int
 
-        :param self.laneLocations: A list of tuples containing (start, end,
-            width, midpoint) of each lane.
-        :type self.laneLocations: list of tuples
+        :param self.lanes: A list containing each separate lane from the gel.
+        :type self.lanes: list of tapeAnalyst.gel_processing.GelLane
 
     """
     def __init__(self, fname, sample):
@@ -60,25 +59,6 @@ class TapeStationGel():
         Using the dye front (Green) and the dye end (Purple) figure out the
         coordinates in the image that contain the gel. Select the regions with
         "green" or "purple" colors. 
-
-        :Attr:
-            :param self.gelBottom: The lowest y-axis location of the dye front.
-            :type self.gelBottom: int
-            
-            :param self.gelTop: The highest y-axis location of the dye end.
-            :type self.gelTop: int
-
-            :param self.gelLeft: The lowest x-axis location of the dyes (front
-                or end).
-            :type self.gelLeft: int
-
-            :param self.gelRight: The highest x-axis location of the dyes (front
-                or end).
-            :type self.gelRight: int
-
-            :param self.dyeGel: Gel image containing only the dye front and dye
-                end.
-            :type self.dyeGel: numpy.ndarray
 
         """
         # Get bottom coords from dye front (GREEN).
@@ -140,9 +120,7 @@ class TapeStationGel():
         return color.rgb2gray(image2)
 
     def splitLanes(self, sample):
-        """ Using the dye front and end, separate lanes.
-
-        """
+        """ Using the dye front and end, separate lanes. """
         # Create row vector where lanes are values above 0
         dyeLanes = np.nonzero(self.dyeGel.sum(axis=0))[0]
 
@@ -150,10 +128,10 @@ class TapeStationGel():
         laneLocations = self.getLaneLocations(dyeLanes)
 
         # Iterate of lanes and create Lane objects
-        lanes = list()
+        self.lanes = list()
         for index, lane in enumerate(laneLocations):
             row = sample.iloc[index]
-            lanes.append(GelLane(gel=self.grayGel, wellID=row['wellID'],
+            self.lanes.append(GelLane(gel=self.grayGel, wellID=row['wellID'],
                                  description=row['description'], **lane))
 
     def getLaneLocations(self, arr):
@@ -195,49 +173,57 @@ class TapeStationGel():
         """
         return np.split(arr, np.where(np.diff(arr) != stepsize)[0]+1)
 
-    def getLadderLocation(self, sample):
-        """ Identify lane(s) with ladder. 
-        
-        Using information from the sample sheet (description column), figure
-        out which lane(s) contain the ladder. 
-
-        """
-        ladder = sample[sample['description'].str.lower() == 'ladder'].index
-        if not ladder.any():
-            logger.warn('There was no ladder present in the sample sheet. If a ' +
-                        'ladder was used, please add "ladder" to the description field ' +
-                        'in the sample sheet.')
-            ladder = None
-
-        return ladder
-
-    def generateGrayIntensities(self):
-        """ Get column vector of intensity values.
-
-        From each lane pull the mean intensity.
-
-        :Attr:
-            :param self.laneIntensities: A list of grary scale intensities
-            :type self.laneIntensities: list of float
-
-        """
-        intensities = list()
-        for lane in self.laneLocations:
-            start = lane[0]
-            end = lane[1]
-            midpoint = lane[3]
-            col = self.grayGel[:, start:end]
-            mean = np.mean(col, axis=1)
-            intensities.append(mean)
-
-        self.laneIntensities = intensities
-
-
 class GelLane():
-    """ Class representing a single lane of a gel """
+    """ A single lane of a tape station gel gel. 
     
+    :Args:
+        :param gel: Processed tape station gel image.
+        :type gel: tapeAnalyst.gel_processing.TapeStationGel
+
+        :param start: Start location of the lane
+        :type start: int
+
+        :param end: End location of the lane
+        :type end: int
+
+        :param wellID: Sample well ID from a 96 well plate
+        :type wellID: str
+
+        :param description: Sample description, keyword ladder if the sample is
+            a ladder.
+        :type description: str
+    
+    :Attr:
+        :param self.start: Start location of the lane
+        :type self.start: int
+
+        :param self.end: End location of the lane
+        :type self.end: int
+
+        :param self.wellID: Sample well ID from a 96 well plate
+        :type self.wellID: str
+
+        :param self.description: Sample description, keyword ladder if the sample is
+            a ladder.
+        :type self.description: str
+
+        :param self.lane: 2d array of gray scale intensity values.
+        :type self.lane: numpy.ndarray
+
+        :param self.laneMean: Column vector of mean intensity values for the lane.
+        :type self.lane: list of float
+
+        :param self.ladder: True if the given lane is a ladder.
+        :type self.ladder: boolean
+
+        :param self.MW: If the lane is a ladder, then identify intensity peaks
+            from self.laneMean and relate these to the ladders molecular
+            weights by creating a list of tuples (peak location, molecular
+            weight).
+        :type self.MW: list of tuples of int
+
+    """
     def __init__(self, gel, start, end, wellID, description=None):
-        """ """
         # Set basic attributes
         self.start = start
         self.end = end
@@ -252,9 +238,9 @@ class GelLane():
         if self.description == 'ladder':
             self.ladder = True
             self.getMW()
-
         else:
             self.ladder = False
+            #self.callPeaks()
 
     def getMW(self):
         """ Get molecular weights from a ladder. 
@@ -273,17 +259,17 @@ class GelLane():
         # filters until calling exactly 10 peaks.
         for i in np.arange(0, 1, 0.01):
             his[his < i] = 0
-            peaks = signal.find_peaks_cwt(his, widths=np.arange(3, 5))
-            if len(peaks) == 10:
-                self.MW = zip(peaks, weights)
+            self.peaks = signal.find_peaks_cwt(his, widths=np.arange(3, 5))
+            if len(self.peaks) == 10:
+                self.MW = zip(self.peaks, weights)
                 break
-
-        pickle.dump(self.MW, open('/Users/fearjm/devel/tapeAnalyst/data/mw.pkl', 'wb'))
 
         if self.MW is None:
             logger.warn('Peaks at all molecular weights could not be identified, check ladder.')
 
-
+    def callPeaks(self):
+        """ Identify peaks in the lane """
+        self.peaks = signal.find_peaks_cwt(self.laneMean)
 
 if __name__ == '__main__':
     pass
