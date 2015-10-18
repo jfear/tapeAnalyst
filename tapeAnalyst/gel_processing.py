@@ -2,10 +2,7 @@
 import numpy as np
 from skimage import io, color
 from scipy import signal as signal
-<<<<<<< HEAD
 from scipy.interpolate import interp1d
-=======
->>>>>>> c4bb76a3650ef24a1d566c7a4c6dfffc0d188b09
 
 class TapeStationGel():
     """ Class for handling Tape Station Gels.
@@ -40,16 +37,12 @@ class TapeStationGel():
         :param self.gelRigth: Location of the right of the gel (Green and Purple band).
         :type self.gelRigth: int
 
-<<<<<<< HEAD
         :param self.lanes: A list containing each separate lane from the gel
             (excluding ladders).
         :type self.lanes: list of tapeAnalyst.gel_processing.GelLane
 
         :param self.lanes: A list containing all lanes that were annotated as
             ladders.
-=======
-        :param self.lanes: A list containing each separate lane from the gel.
->>>>>>> c4bb76a3650ef24a1d566c7a4c6dfffc0d188b09
         :type self.lanes: list of tapeAnalyst.gel_processing.GelLane
 
     """
@@ -63,7 +56,6 @@ class TapeStationGel():
         # Figure out the top and bottom coordinates of gel using the dye
         self.getGelRegion()
 
-<<<<<<< HEAD
         # Parse apart lanes using dye front and end and pull out lanes
         # containing ladders.
         self.splitLanes(sample)
@@ -85,68 +77,34 @@ class TapeStationGel():
         # Get bottom coords from dye front (GREEN).
         self.dyeFrontGel = self.dyeMarker(dye='front')
         dyeFrontCoords = np.nonzero(self.dyeFrontGel.sum(axis=1))[0]
-=======
-        # Parse lanes using dye front and end
-        self.splitLanes(sample)
-
-    def getGelRegion(self):
-        """ Identify the region in the image that contains the gel.
-
-        Using the dye front (Green) and the dye end (Purple) figure out the
-        coordinates in the image that contain the gel. Select the regions with
-        "green" or "purple" colors. 
-
-        """
-        # Get bottom coords from dye front (GREEN).
-        dyeFrontGel = self.dyeMarker(dye='front')
-        dyeFrontCoords = np.nonzero(dyeFrontGel.sum(axis=1))[0]
->>>>>>> c4bb76a3650ef24a1d566c7a4c6dfffc0d188b09
         if dyeFrontCoords[-1].any():
             self.gelBottom = dyeFrontCoords[-1]
         else:
             self.gelBottom = None
 
         # Get top coords from dye end (PURPLE)
-<<<<<<< HEAD
         self.dyeEndGel = self.dyeMarker(dye='end')
         dyeEndCoords = np.nonzero(self.dyeEndGel.sum(axis=1))[0]
-=======
-        dyeEndGel = self.dyeMarker(dye='end')
-        dyeEndCoords = np.nonzero(dyeEndGel.sum(axis=1))[0]
->>>>>>> c4bb76a3650ef24a1d566c7a4c6dfffc0d188b09
         if dyeEndCoords[0].any():
             self.gelTop = dyeEndCoords[0]
         else:
             self.gelTop = None
 
-<<<<<<< HEAD
         # Get left and right coords by combining green and purple
         self.dyeGel = self.dyeFrontGel + self.dyeEndGel
         self.dyeGel[self.dyeGel > 0] = 1
         self.grayGel[self.dyeGel > 0] = 1
 
-=======
-        # Get left and right coords by comibining green and purple
-        self.dyeGel = dyeFrontGel + dyeEndGel
->>>>>>> c4bb76a3650ef24a1d566c7a4c6dfffc0d188b09
         dyeCoords = np.nonzero(self.dyeGel.sum(axis=0))[0]
         self.gelLeft = dyeCoords[0]
         self.gelRight = dyeCoords[-1]
 
     def dyeMarker(self, dye='front'):
-<<<<<<< HEAD
         """ Set boolean mask on gel image to identify dye front or dye end.
 
         The TapeStation annotates the dye front as green and the dye end as
         purple.  Using these color profiles, mask the remainder of the image to
         be white, effectively selecting the regions with these colors.
-=======
-        """ Set boolean mask on gel image to identify dye front or dye end. 
-
-        The TapeStation annotates the dye front as green and the dye end as purple.
-        Using these color profiles, mask the remainder of the image to be
-        white, effectively selecting the regions with these colors.
->>>>>>> c4bb76a3650ef24a1d566c7a4c6dfffc0d188b09
 
         :Args:
             :param dye: Name of the dye you want to locate {'front', 'end'}
@@ -182,12 +140,11 @@ class TapeStationGel():
         # Create row vector where lanes are values above 0
         dyeLanes = np.nonzero(self.dyeGel.sum(axis=0))[0]
 
-        # Group consecutive pixels that are spearated by 0's into lanes
+        # Group consecutive pixels that are separated by 0's into lanes
         laneLocations = self.getLaneLocations(dyeLanes)
 
         # Iterate of lanes and create Lane objects
         self.lanes = list()
-<<<<<<< HEAD
         self.ladders = list()
         for index, lane in enumerate(laneLocations):
             row = sample.iloc[index]
@@ -196,12 +153,6 @@ class TapeStationGel():
                 self.ladders.append(glane)
             else:
                 self.lanes.append(glane)
-=======
-        for index, lane in enumerate(laneLocations):
-            row = sample.iloc[index]
-            self.lanes.append(GelLane(gel=self.grayGel, wellID=row['wellID'],
-                                 description=row['description'], **lane))
->>>>>>> c4bb76a3650ef24a1d566c7a4c6dfffc0d188b09
 
     def getLaneLocations(self, arr):
         """ Take a dye array and figure out where lanes are located.
@@ -242,7 +193,6 @@ class TapeStationGel():
         """
         return np.split(arr, np.where(np.diff(arr) != stepsize)[0]+1)
 
-<<<<<<< HEAD
 
 class GelLane():
     """ A single lane of a tape station gel gel. 
@@ -268,32 +218,6 @@ class GelLane():
         :param self.start: Start location of the lane
         :type self.start: int
 
-=======
-class GelLane():
-    """ A single lane of a tape station gel gel. 
-    
-    :Args:
-        :param gel: Processed tape station gel image.
-        :type gel: tapeAnalyst.gel_processing.TapeStationGel
-
-        :param start: Start location of the lane
-        :type start: int
-
-        :param end: End location of the lane
-        :type end: int
-
-        :param wellID: Sample well ID from a 96 well plate
-        :type wellID: str
-
-        :param description: Sample description, keyword ladder if the sample is
-            a ladder.
-        :type description: str
-    
-    :Attr:
-        :param self.start: Start location of the lane
-        :type self.start: int
-
->>>>>>> c4bb76a3650ef24a1d566c7a4c6dfffc0d188b09
         :param self.end: End location of the lane
         :type self.end: int
 
@@ -303,7 +227,6 @@ class GelLane():
         :param self.description: Sample description, keyword ladder if the sample is
             a ladder.
         :type self.description: str
-<<<<<<< HEAD
 
         :param self.lane: 2d array of gray scale intensity values.
         :type self.lane: numpy.ndarray
@@ -329,23 +252,6 @@ class GelLane():
 
         :param self.valleys: List of vally locations.
         :type self.valleys: list of int
-=======
-
-        :param self.lane: 2d array of gray scale intensity values.
-        :type self.lane: numpy.ndarray
-
-        :param self.laneMean: Column vector of mean intensity values for the lane.
-        :type self.lane: list of float
-
-        :param self.ladder: True if the given lane is a ladder.
-        :type self.ladder: boolean
-
-        :param self.MW: If the lane is a ladder, then identify intensity peaks
-            from self.laneMean and relate these to the ladders molecular
-            weights by creating a list of tuples (peak location, molecular
-            weight).
-        :type self.MW: list of tuples of int
->>>>>>> c4bb76a3650ef24a1d566c7a4c6dfffc0d188b09
 
     """
     def __init__(self, gel, start, end, wellID, description=None):
@@ -355,21 +261,15 @@ class GelLane():
         self.wellID = wellID.upper()
         self.description = str(description).lower()
 
-<<<<<<< HEAD
         # Identify the lane level dye locations
         self.getDyeLocations(gel)
 
         # Calculate mean for the lane
         self.lane = gel.grayGel[:, start:end]
-=======
-        # Calculate mean for the lane
-        self.lane = gel[:, start:end]
->>>>>>> c4bb76a3650ef24a1d566c7a4c6dfffc0d188b09
         self.laneMean = self.lane.mean(axis=1)
 
         # If the lane is a ladder then set additional attributes
         if self.description == 'ladder':
-<<<<<<< HEAD
             self.flag = 'LADDER'
             self.getMW()
         else:
@@ -396,13 +296,6 @@ class GelLane():
         except:
             self.dyeEndStart = None
             self.dyeEndEnd = None
-=======
-            self.ladder = True
-            self.getMW()
-        else:
-            self.ladder = False
-            #self.callPeaks()
->>>>>>> c4bb76a3650ef24a1d566c7a4c6dfffc0d188b09
 
     def getMW(self):
         """ Get molecular weights from a ladder. 
@@ -423,17 +316,12 @@ class GelLane():
             his[his < i] = 0
             self.peaks = signal.find_peaks_cwt(his, widths=np.arange(3, 5))
             if len(self.peaks) == 10:
-<<<<<<< HEAD
                 self.MW = list(zip(self.peaks, weights))
-=======
-                self.MW = zip(self.peaks, weights)
->>>>>>> c4bb76a3650ef24a1d566c7a4c6dfffc0d188b09
                 break
 
         if self.MW is None:
             logger.warn('Peaks at all molecular weights could not be identified, check ladder.')
 
-<<<<<<< HEAD
 
 def interpMW(ladders):
     """ Create a MW interpolation method if ladder is present. 
@@ -457,6 +345,26 @@ def interpMW(ladders):
 
 
 def getFirst(array, value, direction='greater'):
+    """ Get first value that is either greater than or less than a value.
+
+    Given an array and a value. Figure out where in the array the first value
+    that is greater than or the last value that is less than. Can be used to
+    find bands in an image.
+
+    :Args:
+        :param array: List of numbers.
+        :type array: array-like
+
+        :param value: value you want to test.
+        :param value: int
+
+        :param direction: Direction for the test 'greater' or 'less'.
+        :type direction: str
+
+    :returns: Index of the first value.
+    :rtype: int
+
+    """
     if direction == 'greater':
         mask = array > value
         return array[np.nonzero(mask)[0][0]]
@@ -531,12 +439,6 @@ def summaryStats(self):
         self.flag = 'MULTI'
 
 
-
-=======
-    def callPeaks(self):
-        """ Identify peaks in the lane """
-        self.peaks = signal.find_peaks_cwt(self.laneMean)
->>>>>>> c4bb76a3650ef24a1d566c7a4c6dfffc0d188b09
 
 if __name__ == '__main__':
     pass
