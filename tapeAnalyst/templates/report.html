@@ -7,13 +7,23 @@
     <img src="data:image/png;base64,{{ fullGelPlot }}"/>
 {% endif %}
 
+{%if targetRange != None %}
+<p><strong>Targeted Molecular weight range:</strong> {{ targetRange[0] }}--{{ targetRange[1] }}</p>
+
+{% endif %}
+
 {% for row in rows %}
-    <h2>Lane {{ row['lane'] }}</h2>
+    <h2>Lane {{ row['index'] }}</h2>
     <p><strong>Well ID:</strong> {{ row['wellID'] }}</p>
     <p><strong>Description:</strong> {{ row['description'] }}</p>
+    <p><strong>Flags:</strong> {{ row['flags'] }}</p>
 
-    {%if row['lanePlot'] != None %}
-        <img src="data:image/png;base64,{{ row['figdata_png'] }}"/>
+    {%if row['image'] != None %}
+        <img src="data:image/png;base64,{{ row['image'] }}"/>
+    {% endif %}
+
+    {%if row['table'] != None %}
+        {{ row['table'] }}
     {% endif %}
 
 {% endfor %}

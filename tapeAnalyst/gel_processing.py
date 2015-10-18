@@ -1,8 +1,15 @@
 #!/usr/bin/env python
+
+import logging
+logger = logging.getLogger()
+
 import numpy as np
-from skimage import io, color
+import pandas as pd
 from scipy import signal as signal
+import scipy.stats as stats
 from scipy.interpolate import interp1d
+from skimage import io, color, exposure
+
 
 class TapeStationGel():
     """ Class for handling Tape Station Gels.
@@ -61,9 +68,6 @@ class TapeStationGel():
         self.splitLanes(sample)
 
         if len(self.ladders) == 0:
-            logger.warn('There was no ladder present in the sample sheet. If a ' +
-                        'ladder was used, please add "ladder" to the description field ' +
-                        'in the sample sheet.')
             self.ladders = None
 
     def getGelRegion(self):
@@ -144,14 +148,16 @@ class TapeStationGel():
         laneLocations = self.getLaneLocations(dyeLanes)
 
         # Iterate of lanes and create Lane objects
+        self.laneIndex = dict()
         self.lanes = list()
         self.ladders = list()
         for index, lane in enumerate(laneLocations):
             row = sample.iloc[index]
-            glane = GelLane(self, wellID=row['wellID'], description=row['description'], **lane)
-            if glane.flag == 'LADDER':
+            glane = GelLane(self, index=index, wellID=row['wellID'], description=row['description'], **lane)
+            if 'LADDER' in glane.flag:
                 self.ladders.append(glane)
             else:
+                self.laneIndex[row['wellID']] = index
                 self.lanes.append(glane)
 
     def getLaneLocations(self, arr):
@@ -192,6 +198,15 @@ class TapeStationGel():
 
         """
         return np.split(arr, np.where(np.diff(arr) != stepsize)[0]+1)
+
+    def getLane(self, wellID):
+        """ Given a wellID number, pull specific lane. 
+        
+        :param wellID: ID number of the well that you want to view
+        :type wellID: str
+
+        """
+        return self.lanes[self.laneIndex[wellID]]
 
 
 class GelLane():
@@ -236,10 +251,13 @@ class GelLane():
 
         :param self.flag: A set of flags describing the quality of the lane.
             * LADDER: if the lane is a ladder
-            * MULTI: if the lane has multiple peaks, suggesting poor quality
-            * GOOD: if the lane has a single large peak that is normally distributed.
+            * MULTIMODAL: if the lane has multiple peaks, suggesting poor quality
+            * NODYEEND: if the dye end was not present
+            * NODYEFRONT: if the dye front was not present
             * NONORM: if the lane has a single large peak but it is not normally distributed.
-        :type self.flag: str
+            * NORMAL: if the lane has a single large peak that is normally distributed.
+            * UNIMODAL: if the lane has single peaks
+        :type self.flag: list of str
 
         :param self.MW: If the lane is a ladder, then identify intensity peaks
             from self.laneMean and relate these to the ladders molecular
@@ -254,26 +272,30 @@ class GelLane():
         :type self.valleys: list of int
 
     """
-    def __init__(self, gel, start, end, wellID, description=None):
+    def __init__(self, gel, start, end, wellID, index, description=None):
         # Set basic attributes
         self.start = start
         self.end = end
         self.wellID = wellID.upper()
+        self.index = index + 1
         self.description = str(description).lower()
+        self.flag = list()
 
         # Identify the lane level dye locations
         self.getDyeLocations(gel)
 
-        # Calculate mean for the lane
+        # Calculate mean pixel intensity for each row in the lane
         self.lane = gel.grayGel[:, start:end]
         self.laneMean = self.lane.mean(axis=1)
 
+        # Make a filtered distribution excluding the Dyes
+        if self.dyeEndEnd and self.dyeFrontStart:
+            self.laneMeanNoDye = self.laneMean[self.dyeEndEnd+15:self.dyeFrontStart-15]
+
         # If the lane is a ladder then set additional attributes
         if self.description == 'ladder':
-            self.flag = 'LADDER'
+            self.flag.append('LADDER')
             self.getMW()
-        else:
-            self.flag = None
 
     def getDyeLocations(self, gel):
         """ Locate where the dye end and dye front are at in the lane. """
@@ -286,6 +308,7 @@ class GelLane():
         except:
             self.dyeFrontStart = None
             self.dyeFrontEnd = None
+            self.flag.append('NODYEFRONT')
 
         # Dye End (Purple)
         end = gel.dyeEndGel[:, self.start:self.end]
@@ -296,6 +319,7 @@ class GelLane():
         except:
             self.dyeEndStart = None
             self.dyeEndEnd = None
+            self.flag.append('NODYEEND')
 
     def getMW(self):
         """ Get molecular weights from a ladder. 
@@ -323,8 +347,10 @@ class GelLane():
             logger.warn('Peaks at all molecular weights could not be identified, check ladder.')
 
 
-def interpMW(ladders):
+def interpToMW(ladders):
     """ Create a MW interpolation method if ladder is present. 
+
+    Convert from coordinate system to molecular weight.
 
     :Args:
         :param ladders: List of lanes that are ladders.
@@ -341,6 +367,27 @@ def interpMW(ladders):
 
     # Build interpolation function to estimate MW for any position
     # value. MWs are logarithmic, use a quadratic function.
+    return interp1d(x, y, kind='quadratic', bounds_error=False)
+
+def interpFromMW(ladders):
+    """ Create a MW interpolation method if ladder is present. 
+
+    Convert from molecular weight to coordinate system.
+
+    :Args:
+        :param ladders: List of lanes that are ladders.
+        :type ladders: list of tapeAnalyst.gel_processing.GelLane
+
+    :returns: An interpolation function.
+    :rtype: scipy.interpolate.interp1d
+
+    """
+    # Get vector of gel locations by averaging MW locations across
+    # ladders
+    x = np.array(ladders[0].MW)[:, 1]
+    y = np.array(ladders[0].MW)[:, 0]
+
+    # Build interpolation function to estimate coordinate from MW.
     return interp1d(x, y, kind='quadratic', bounds_error=False)
 
 
@@ -373,35 +420,64 @@ def getFirst(array, value, direction='greater'):
         return array[np.nonzero(mask)[0][-1]]
 
 
-def callPeaks(lane):
+def callPeaks(lane, gain=7, hamming=5, filter=0.2, order=9):
     """ Identify peaks in the lane 
     
     :Args:
         :param lane: The lane which to call peaks.
         :type lane: tapeAnalyst.gel_processing.GelLane
 
+        :param gain: The gain value to use for increasing contrast (see
+            skimage.exposure.adjust_sigmoid)
+        :type gain: int
+
+        :param hamming: The value to use Hamming convolution (see
+            scipy.signal.hamming)
+        :type gain: int
+
+        :param filter: Remove all pixels whose intensity is below this value.
+        :type filter: float
+
+        :param order: The distance allowed for finding maxima (see scipy.signal.argrelmax)
+        :type order: int
+
     """
-    # Get the peak locations of the dye front and dye end
-    dyeFrontPeak = np.ceil(np.mean([lane.dyeFrontStart, lane.dyeFrontEnd]))
-    dyeEndPeak = np.ceil(np.mean([lane.dyeEndStart, lane.dyeEndEnd]))
+    # Increase contrast to help with peak calling
+    ladj = exposure.adjust_sigmoid(lane.lane, cutoff=0.5, gain=gain)
 
-    # Get minimum values across entire signal
-    mins = signal.argrelmin(lane.laneMean)[0]
+    # Tack the max pixel intensity for each row in then lane's gel image.
+    laneDist = ladj.max(axis=1)
 
-    # Figure out where the minimums are near dyes.
-    filter1 = getFirst(mins, lane.dyeEndEnd, direction='greater')
-    filter2 = getFirst(mins, lane.dyeFrontStart, direction='less')
+    # Smooth the distribution
+    laneDist = signal.convolve(laneDist, signal.hamming(hamming))
 
-    # Filter out the dye peaks
-    lmean = lane.laneMean.copy()
+    # Get the locations of the dye front and dye end. Peak calling is difficult
+    # here because dyes tend to plateau. To aid peak calling, add an artificial
+    # spike in dye regions. Also remove all peaks outside of the dyes
+    try:
+        dyeFrontPeak = int(np.ceil(np.mean([lane.dyeFrontStart, lane.dyeFrontEnd])))
+        laneDist[dyeFrontPeak] = laneDist[dyeFrontPeak] + 2
+        laneDist[dyeFrontPeak+1:] = 0
+    except:
+        logger.warn('No Dye Front')
 
-    # Smooth using hann method
-    #smooth = signal.convolve(lmean, signal.hann(30))
-    peaks = signal.argrelmax(lmean, order=10, mode='clip')[0]
-    return lmean, peaks
+    try:
+        dyeEndPeak = int(np.ceil(np.mean([lane.dyeEndStart, lane.dyeEndEnd])))
+        laneDist[dyeEndPeak] = laneDist[dyeEndPeak] + 2
+        laneDist[:dyeEndPeak-1] = 0
+    except:
+        logger.warn('No Dye End')
+
+    # Filter out low levels
+    laneDist[laneDist < filter] = 0
+
+    # Find local maxima
+    peaks = signal.argrelmax(laneDist, order=order)[0]
+
+    return peaks
 
 
-def summaryStats(self):
+def summaryStats(lane, peaks, molRange):
     """ Calculate various summary stats based on distribution of peaks. 
     
     A good library should have 3 peaks. The two dyes and a middle peak that
@@ -410,33 +486,54 @@ def summaryStats(self):
     determine if approximately normal.
     
     """
-    if len(self.peaks) == 3:
-        # In a clean lane there should be 4 valleys, one before the dye
-        # end, one after the dye front and two surrounding the peak. Slice
-        # out only the peak region. 
-        start = self.valleys[1]
-        end = self.valleys[2]
-        peak = lane.laneMean[start:end]
+    if len(peaks) == 3:
+        # If there are only 3 peaks, than distribution is unimodal.
+        lane.flag.append('UNIMODAL')
 
-        # Calculate intensity summary stats
-        mean = peak.mean()
-        median = peak.median()
-        mode = stats.mode(peak)[0]
-        std = peak.std()
-        skew = stats.skew(peak)[0]
-
-        self.summaryStats = pd.Series([mean, median, mode, std, skew], index=['Mean', 'Median', 'Mode', 'Std Dev', 'Skewness'])
+        # See if the peak is in my molecular range
+        if molRange is not None:
+            if (peaks[1] < molRange).any() and (peaks[1] > molRange).any():
+                lane.flag.append('PEAKINRANGE')
 
         # Test for normality, I don't think the nature of the gel peaks
         # lends itself to normality assumptions. In general gels are left
         # skewed.
-        test, pval = stats.shapiro(peak)
+        test, pval = stats.shapiro(lane.laneMeanNoDye)
         if pval > 0.05:
-            self.flag = 'GOOD'
+            lane.flag.append('NORMAL')
         else:
-            self.flag = 'NONORM'
+            lane.flag.append('NONORM')
     else:
-        self.flag = 'MULTI'
+        lane.flag.append('MULTIMODAL')
+
+    # Summary stats for density excluding dyes
+    if not 'NODYEEND' in lane.flag and not 'NODYEFRONT' in lane.flag:
+        mean = np.mean(lane.laneMeanNoDye)
+        median = np.median(lane.laneMeanNoDye)
+        mode = stats.mode(lane.laneMeanNoDye)[0]
+        std = np.std(lane.laneMeanNoDye)
+        skew = stats.skew(lane.laneMeanNoDye)
+
+        # Build table of stats
+        summaryStatsTable = pd.DataFrame([mean, median, mode, std, skew], index=['Mean', 'Median', 'Mode', 'Std Dev', 'Skewness'], columns=['Values'])
+        summaryStatsTable.index.name = 'Measure'
+
+        # Test if main part of the distribution is in MW region
+        if molRange is not None:
+            if (mean < molRange).any() and (mean > molRange).any():
+                lane.flag.append('MEANINRANGE')
+            if (median < molRange).any() and (median > molRange).any():
+                lane.flag.append('MEDIANINRANGE')
+    else:
+        # Build empty table missing dyes
+        summaryStatsTable = pd.DataFrame(index=['Mean', 'Median', 'Mode', 'Std Dev', 'Skewness'], columns=['Values'])
+        summaryStatsTable.index.name = 'Measure'
+
+
+    return summaryStatsTable
+
+
+
 
 
 

@@ -3,7 +3,8 @@
 import argparse
 import logging
 import sys
-import pickle
+import base64
+from io import BytesIO
 
 # 3rd Party
 import numpy as np
@@ -12,7 +13,7 @@ import scipy.stats as stats
 import matplotlib.pyplot as plt
 
 # tapeAnalyst
-#import tapeAnalyst.reporting as reporting
+import tapeAnalyst.reporting as reporting
 import tapeAnalyst.gel_processing as gp
 
 def getOptions():
@@ -21,10 +22,14 @@ def getOptions():
     parser.add_argument('--gel', dest='gname', action='store', required=True, help='A PNG file containing the gel output from the TapeStations 2200 [Required].')
     parser.add_argument('--sample', dest='sname', action='store', required=True, help='A CSV file containing sample information from the TapeStations 2200 [Required].')
     parser.add_argument('-o', '--output', dest='oname', action='store', required=True, help='The name of HTML output file [Required].')
-    parser.add_argument('--range', dest='range', action='store', required=False, default=None, help='Range for fragment size for doing quality assesment.')
-
+    parser.add_argument('--range', dest='range', action='store', required=False, default=None, nargs=2, type=int, help='Range for fragment size for doing quality assesment in the form of "start end".')
+    parser.add_argument('--gain', dest='gain', action='store', required=False, default=7, type=int, help='The gain value to use for increasing contrast (see skimage.exposure.adjust_sigmoid)')
+    parser.add_argument('--hamming', dest='hamming', action='store', required=False, default=5, type=int, help='The value to use Hamming convolution (see scipy.signal.hamming)') 
+    parser.add_argument('--filter', dest='filter', action='store', required=False, default=0.2, type=float, help='Remove all pixels whose intensity is below this value.') 
+    parser.add_argument('--order', dest='order', action='store', required=False, default=9, type=int, help='The distance allowed for finding maxima (see scipy.signal.argrelmax)') 
     args = parser.parse_args()
     return args
+
 
 def getLogger():
     # Set different streams of STDOUT and STDERR
@@ -40,6 +45,7 @@ def getLogger():
     logger = logging.getLogger()
 
     return logger
+
 
 def importSampleSheet(fname):
     """ Import sample sheet """
@@ -71,41 +77,101 @@ def importSampleSheet(fname):
     return dfSample
 
 
-def summarizeDistributions(gel):
-    """ Summarize distributions for each lane.
-    
-    The following criteria where used to evaluate lanes.
+def addMW_Y(ax, MW):
+    ax.yaxis.tick_right()
+    ax.set_yticks(np.array(MW)[:,0])
+    ax.set_yticklabels(np.array(MW)[:,1])
 
-        1. A good library should have 3 peaks, i.e. the two dyes and a middle
-           peak that is a smear in the desired range. Mark a lane as 'MULTI' if it
-           has more than 3 peaks.
 
-        2. 
-    
-    """
+def addMW_X(ax, MW):
+    ax.set_xticks(np.array(MW)[:,0])
+    ax.set_xticklabels(np.array(MW)[:,1], rotation=90)
 
-    # Construct MW interperlator to estimate molecular weights if ladder is
-    # present.
-    if gel.ladders:
-        interpMW = gp.interpMW(gel.ladders)
+
+def convertImage(fig):
+    """ Converts an image into its base64 byte representation """
+    figfile = BytesIO()
+    fig.savefig(figfile, format='png')
+
+    return base64.b64encode(figfile.getvalue()).decode('utf8')
+
+
+def summarizeDistributions(args, gel):
+    """ Summarize distributions for each lane.  """
+    # Generate a spacer for plotting later.
+    spacer = np.zeros((gel.grayGel.shape[0], 10))
+
+    if gel.ladders is not None:
+        # Construct MW interperlator to estimate molecular weights
+        interpToMW = gp.interpToMW(gel.ladders)
+
+        # If a MW range is provided need to construct an interperlator to go
+        # from MW to coordinates.
+        if args.range is not None:
+            interpFromMW = gp.interpFromMW(gel.ladders)
+            molRange = np.ceil(interpFromMW(args.range))
+        else:
+            molRange = None
+
+        # Build a 'gel' image will all of the ladder lanes put together.
+        ladderImg = list()
+        ladderImg.append(spacer)
+        for ladder in gel.ladders:
+            ladderImg.append(ladder.lane)
+            ladderImg.append(spacer)
+        ladderImg.append(spacer)
+        ladderImg = np.column_stack(np.array(ladderImg))
+        
+        # Set MW
+        MW = np.array(gel.ladders[0].MW)
+    else:
+        MW = None
+        molRange = None
 
     # Iterate over each lane and summarize
+    results = list()
     for lane in gel.lanes:
         # Call peaks for each lane
-        try:
-            peaks = gp.callPeaks(lane)
-        except:
-            pass
+        peaks = gp.callPeaks(lane, gain=args.gain, hamming=args.hamming,
+                             filter=args.filter, order=args.order)
 
-        # Evaluate lanes according to criteria in doc string.
-        #if len(peaks) == 3:
-        #    plt.plot(lane.lane)
-        #    plt.axvline(peaks[1])
-        #    plt.show()
+        # Basic summary stats
+        summaryTable = gp.summaryStats(lane, peaks, molRange)
 
-        #else:
-        #    lane.flag == 'MULTI'
+        # Generate Plot
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10))
 
+        # Gel Image
+        img = np.column_stack([spacer, lane.lane, spacer, spacer, ladderImg])
+        ax1.imshow(img, cmap='Greys')
+
+        # Density Plot
+        ax2.plot(lane.laneMean, color='k')
+        for peak in peaks[1:-1]:
+            ax2.axvline(peak, color='r', ls=':', lw=2)
+
+        # If a range was given, highlight
+        if molRange is not None:
+            molStart = int(min(molRange))
+            molEnd = int(max(molRange))
+            ax2.fill_between(range(molStart, molEnd), 0, lane.laneMean[molStart:molEnd], color='g', alpha=0.3)
+
+        # Add MW is Ladder is present
+        if MW is not None:
+            addMW_Y(ax1, MW)
+            addMW_X(ax2, MW)
+        
+        # Convert fig to binary
+        fig64 = convertImage(fig)
+        plt.close()
+
+        # Build result output
+        results.append({'image': fig64, 'flags': lane.flag, 
+                        'wellID': lane.wellID, 'description': lane.description,
+                        'table': summaryTable.to_html(), 'index': lane.index})
+
+    return results
+            
 
 def main(args):
     # Import Sample Information
@@ -114,16 +180,21 @@ def main(args):
     # Process gel image
     gel = gp.TapeStationGel(args.gname, dfSample)
 
-    #pickle.dump(gel, open('data/gel.pkl', 'wb'))
     # Summarize distributions
-    summary = summarizeDistributions(gel)
+    summary = summarizeDistributions(args, gel)
     
+    # make image of the original gel
+    gelFig, ax = plt.subplots(1, 1, figsize=(12, 4))
+    ax.imshow(gel.colorGel)
+    ax.get_xaxis().set_visible(False)
+    if gel.ladders is not None:
+        addMW_Y(ax, gel.ladders[0].MW)
+    gelFig64 = convertImage(gelFig)
+    plt.close()
 
-    #
     # Generate and output HTML report
-    #
-    #html = reporting.HtmlReport(gel, dfSample)
-    #html.write(args.oname)
+    html = reporting.HtmlReport(gelFig64, summary, args.range)
+    html.write(args.oname)
 
 
 if __name__ == '__main__':
