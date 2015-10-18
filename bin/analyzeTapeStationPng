@@ -1,0 +1,132 @@
+#!/usr/bin/env python
+# Built-in
+import argparse
+import logging
+import sys
+import pickle
+
+# 3rd Party
+import numpy as np
+import pandas as pd
+import scipy.stats as stats
+import matplotlib.pyplot as plt
+
+# tapeAnalyst
+#import tapeAnalyst.reporting as reporting
+import tapeAnalyst.gel_processing as gp
+
+def getOptions():
+    """ Function to pull in command line arguments. """
+    parser = argparse.ArgumentParser(description='A tool to analyze image output from the Agilent Tape Station 2200.')
+    parser.add_argument('--gel', dest='gname', action='store', required=True, help='A PNG file containing the gel output from the TapeStations 2200 [Required].')
+    parser.add_argument('--sample', dest='sname', action='store', required=True, help='A CSV file containing sample information from the TapeStations 2200 [Required].')
+    parser.add_argument('-o', '--output', dest='oname', action='store', required=True, help='The name of HTML output file [Required].')
+    parser.add_argument('--range', dest='range', action='store', required=False, default=None, help='Range for fragment size for doing quality assesment.')
+
+    args = parser.parse_args()
+    return args
+
+def getLogger():
+    # Set different streams of STDOUT and STDERR
+    sout = logging.StreamHandler(stream=sys.stdout)
+    serr = logging.StreamHandler(stream=sys.stderr)
+
+    # Set log levels for different handler
+    sout.setLevel(logging.INFO)
+    serr.setLevel(logging.ERROR)
+
+    # Add Handlers to common logger
+    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level='INFO', handlers=[sout, serr])
+    logger = logging.getLogger()
+
+    return logger
+
+def importSampleSheet(fname):
+    """ Import sample sheet """
+    try:
+        # TapeAnalyst is a Windows program and it encodes CSV files using the
+        # windows style ISO 
+        dfSample = pd.read_csv(args.sname, encoding = "ISO-8859-1")
+    except:
+        # If that fails then try to import without ISO info.
+        dfSample = pd.read_csv(args.sname)
+        logger.warn('Was unable to read sample sheet using Windows specific ISO.')
+    finally:
+        if dfSample.shape[1] == 5:
+            dfSample.columns = ['wellID', 'conc', 'description', 'alert', 'notes']
+
+            # Get row indices by reseting the index. This will add a new column
+            # with 0 - N indices.
+            dfSample.reset_index(inplace=True)
+        else:
+            logger.error('Check formating of the formating of the sample sheet. ' +
+                         'There should be 5 columns with columns for: \
+                            * Well ID \
+                            * Conc. [pg/µl] \
+                            * Sample Description \
+                            * Alert \
+                            * Observations')
+            raise IndexError
+
+    return dfSample
+
+
+def summarizeDistributions(gel):
+    """ Summarize distributions for each lane.
+    
+    The following criteria where used to evaluate lanes.
+
+        1. A good library should have 3 peaks, i.e. the two dyes and a middle
+           peak that is a smear in the desired range. Mark a lane as 'MULTI' if it
+           has more than 3 peaks.
+
+        2. 
+    
+    """
+
+    # Construct MW interperlator to estimate molecular weights if ladder is
+    # present.
+    if gel.ladders:
+        interpMW = gp.interpMW(gel.ladders)
+
+    # Iterate over each lane and summarize
+    for lane in gel.lanes:
+        # Call peaks for each lane
+        try:
+            peaks = gp.callPeaks(lane)
+        except:
+            pass
+
+        # Evaluate lanes according to criteria in doc string.
+        #if len(peaks) == 3:
+        #    plt.plot(lane.lane)
+        #    plt.axvline(peaks[1])
+        #    plt.show()
+
+        #else:
+        #    lane.flag == 'MULTI'
+
+
+def main(args):
+    # Import Sample Information
+    dfSample = importSampleSheet(args.sname)
+
+    # Process gel image
+    gel = gp.TapeStationGel(args.gname, dfSample)
+
+    #pickle.dump(gel, open('data/gel.pkl', 'wb'))
+    # Summarize distributions
+    summary = summarizeDistributions(gel)
+    
+
+    #
+    # Generate and output HTML report
+    #
+    #html = reporting.HtmlReport(gel, dfSample)
+    #html.write(args.oname)
+
+
+if __name__ == '__main__':
+    args = getOptions()
+    logger = getLogger()
+    main(args)

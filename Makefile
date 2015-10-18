@@ -5,7 +5,7 @@ test:
 	nosetests tests
 
 run:
-	python ./tapeAnalyst/analyzeTapeStationPng \
+	python ./bin/analyzeTapeStationPng \
 		--gel ./data/JH_gel.png \
 		--sample ./data/JH_sample.csv \
 		--output ./data/JH_report.html 
