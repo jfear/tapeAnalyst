@@ -17,4 +17,24 @@
         {% block content %}{% endblock %}
     </div>
 </body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.0.0-alpha1/jquery.min.js"> </script>
+<script type="text/javascript">
+$(document).ready(function() {
+    // Add bootstrap classes
+    $('.dataframe').addClass('table')
+    $('.dataframe').addClass('table-striped')
+    $('.dataframe').addClass('table-condensed')
+
+    // Remove default dataframe class
+    $('.dataframe').removeClass('dataframe')
+
+    // Color flags that bad red
+    $('.flags').each(function () {
+        if (this.innerHTML.indexOf("MULTI") > -1) {
+            $(this).css('color', 'red');
+        }
+    });
+
+    });
+</script>
 </html>

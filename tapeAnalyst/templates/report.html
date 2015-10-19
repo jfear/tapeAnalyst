@@ -16,7 +16,7 @@
     <h2>Lane {{ row['index'] }}</h2>
     <p><strong>Well ID:</strong> {{ row['wellID'] }}</p>
     <p><strong>Description:</strong> {{ row['description'] }}</p>
-    <p><strong>Flags:</strong> {{ row['flags'] }}</p>
+    <p class="flags"><strong>Flags:</strong> {{ row['flags'] }}</p>
 
     {%if row['image'] != None %}
         <img src="data:image/png;base64,{{ row['image'] }}"/>
