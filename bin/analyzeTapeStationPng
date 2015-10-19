@@ -3,18 +3,14 @@
 import argparse
 import logging
 import sys
-import base64
-from io import BytesIO
 
 # 3rd Party
-import numpy as np
 import pandas as pd
-import scipy.stats as stats
-import matplotlib.pyplot as plt
 
 # tapeAnalyst
 import tapeAnalyst.reporting as reporting
 import tapeAnalyst.gel_processing as gp
+import tapeAnalyst.analysis as analysis
 
 def getOptions():
     """ Function to pull in command line arguments. """
@@ -77,102 +73,6 @@ def importSampleSheet(fname):
     return dfSample
 
 
-def addMW_Y(ax, MW):
-    ax.yaxis.tick_right()
-    ax.set_yticks(np.array(MW)[:,0])
-    ax.set_yticklabels(np.array(MW)[:,1])
-
-
-def addMW_X(ax, MW):
-    ax.set_xticks(np.array(MW)[:,0])
-    ax.set_xticklabels(np.array(MW)[:,1], rotation=90)
-
-
-def convertImage(fig):
-    """ Converts an image into its base64 byte representation """
-    figfile = BytesIO()
-    fig.savefig(figfile, format='png')
-
-    return base64.b64encode(figfile.getvalue()).decode('utf8')
-
-
-def summarizeDistributions(args, gel):
-    """ Summarize distributions for each lane.  """
-    # Generate a spacer for plotting later.
-    spacer = np.zeros((gel.grayGel.shape[0], 10))
-
-    if gel.ladders is not None:
-        # Construct MW interperlator to estimate molecular weights
-        interpToMW = gp.interpToMW(gel.ladders)
-
-        # If a MW range is provided need to construct an interperlator to go
-        # from MW to coordinates.
-        if args.range is not None:
-            interpFromMW = gp.interpFromMW(gel.ladders)
-            molRange = np.ceil(interpFromMW(args.range))
-        else:
-            molRange = None
-
-        # Build a 'gel' image will all of the ladder lanes put together.
-        ladderImg = list()
-        ladderImg.append(spacer)
-        for ladder in gel.ladders:
-            ladderImg.append(ladder.lane)
-            ladderImg.append(spacer)
-        ladderImg.append(spacer)
-        ladderImg = np.column_stack(ladderImg)
-        
-        # Set MW
-        MW = np.array(gel.ladders[0].MW)
-    else:
-        MW = None
-        molRange = None
-
-    # Iterate over each lane and summarize
-    results = list()
-    for lane in gel.lanes:
-        # Call peaks for each lane
-        peaks = gp.callPeaks(lane, gain=args.gain, hamming=args.hamming,
-                             filter=args.filter, order=args.order)
-
-        # Basic summary stats
-        summaryTable = gp.summaryStats(lane, peaks, molRange)
-
-        # Generate Plot
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10))
-
-        # Gel Image
-        img = np.column_stack([spacer, lane.lane, spacer, spacer, ladderImg])
-        ax1.imshow(img, cmap='Greys')
-
-        # Density Plot
-        ax2.plot(lane.laneMean, color='k')
-        for peak in peaks[1:-1]:
-            ax2.axvline(peak, color='r', ls=':', lw=2)
-
-        # If a range was given, highlight
-        if molRange is not None:
-            molStart = int(min(molRange))
-            molEnd = int(max(molRange))
-            ax2.fill_between(range(molStart, molEnd), 0, lane.laneMean[molStart:molEnd], color='g', alpha=0.3)
-
-        # Add MW is Ladder is present
-        if MW is not None:
-            addMW_Y(ax1, MW)
-            addMW_X(ax2, MW)
-        
-        # Convert fig to binary
-        fig64 = convertImage(fig)
-        plt.close()
-
-        # Build result output
-        results.append({'image': fig64, 'flags': lane.flag, 
-                        'wellID': lane.wellID, 'description': lane.description,
-                        'table': summaryTable.to_html(), 'index': lane.index})
-
-    return results
-            
-
 def main(args):
     # Import Sample Information
     dfSample = importSampleSheet(args.sname)
@@ -181,16 +81,10 @@ def main(args):
     gel = gp.TapeStationGel(args.gname, dfSample)
 
     # Summarize distributions
-    summary = summarizeDistributions(args, gel)
+    summary = analysis.summarizeDistributions(args, gel)
     
     # make image of the original gel
-    gelFig, ax = plt.subplots(1, 1, figsize=(12, 4))
-    ax.imshow(gel.colorGel)
-    ax.get_xaxis().set_visible(False)
-    if gel.ladders is not None:
-        addMW_Y(ax, gel.ladders[0].MW)
-    gelFig64 = convertImage(gelFig)
-    plt.close()
+    gelFig64 = analysis.fullGelImage(gel)
 
     # Generate and output HTML report
     html = reporting.HtmlReport(gelFig64, summary, args.range)
