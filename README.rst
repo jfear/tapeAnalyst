@@ -22,7 +22,12 @@ for use with this tool.
 Acquisition
 ~~~~~~~~~~~
 
+<<<<<<< HEAD
 .. image http://raw.githubusercontent.com/jfear/tapeAnalyst/master/images/acquire_sample.PNG
+=======
+..image 
+http://raw.githubusercontent.com/jfear/tapeAnalyst/master/images/acquire_sample.PNG
+>>>>>>> 5da4cf1db9de1912125d8ffbc0d66ba0e084bf1c
 
 When starting a tape station run, the user has the opportunity to add a 
 description for each sample (red box). These descriptions can be copied and 
@@ -35,7 +40,12 @@ to the description (red star).
 Processing
 ~~~~~~~~~~
 
+<<<<<<< HEAD
 .. image http://raw.githubusercontent.com/jfear/tapeAnalyst/master/images/adjust_image.PNG
+=======
+..image 
+http://raw.githubusercontent.com/jfear/tapeAnalyst/master/images/adjust_image.PNG
+>>>>>>> 5da4cf1db9de1912125d8ffbc0d66ba0e084bf1c
 
 After a successful run the Tape Station, the following steps need to be done to 
 process the data. (1) Align the sample using the dye location. (2) Adjust the 
@@ -46,7 +56,12 @@ skipped. (3) Show all lanes at once. (4) Take a gel snap shot.
 Export
 ~~~~~~
 
+<<<<<<< HEAD
 .. image http://raw.githubusercontent.com/jfear/tapeAnalyst/master/images/export_image.PNG
+=======
+..image 
+http://raw.githubusercontent.com/jfear/tapeAnalyst/master/images/export_image.PNG
+>>>>>>> 5da4cf1db9de1912125d8ffbc0d66ba0e084bf1c
 
 To export data, go to the `File` tab. (1) Click on the export tab. (2) Select 
 export to CSV. (3) Make sure `Sample Table` is checked. You can also export the 
