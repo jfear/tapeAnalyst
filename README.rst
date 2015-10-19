@@ -11,7 +11,8 @@ tests for normality), then image analysis of exported gels is required. We want
 to have a set of defined criteria that would allow an unbiased selection of 
 quality libraries.
 
-.. _`Agilent Tape Stations 2200`: http://www.genomics.agilent.com/en/TapeStation-System/2200-TapeStation-Instrument/?cid=AG-PT-181&tabId=AG-PR-1004
+.. _`Agilent Tape Stations 2200`: 
+http://www.genomics.agilent.com/en/TapeStation-System/2200-TapeStation-Instrument/?cid=AG-PT-181&tabId=AG-PR-1004
 
 Agilent Tape Station Acquisition
 --------------------------------
@@ -22,7 +23,9 @@ for use with this tool.
 Acquisition
 ~~~~~~~~~~~
 
-.. image: https://raw.githubusercontent.com/jfear/tapeAnalyst/master/images/acquire_sample.PNG
+.. image:: https://raw.githubusercontent.com/jfear/tapeAnalyst/master/images/acquire_sample.PNG
+    :height 100px
+    
 
 When starting a tape station run, the user has the opportunity to add a 
 description for each sample (red box). These descriptions can be copied and 
