@@ -286,11 +286,18 @@ class GelLane():
 
         # Calculate mean pixel intensity for each row in the lane
         self.lane = gel.grayGel[:, start:end]
+        self.laneColor = gel.colorGel[:, start:end]
         self.laneMean = self.lane.mean(axis=1)
 
         # Make a filtered distribution excluding the Dyes
         if self.dyeEndEnd and self.dyeFrontStart:
             self.laneMeanNoDye = self.laneMean[self.dyeEndEnd+15:self.dyeFrontStart-15]
+        elif self.dyeEndEnd:
+            self.laneMeanNoDye = self.laneMean[self.dyeEndEnd+15:]
+        elif self.dyeFrontStart:
+            self.laneMeanNoDye = self.laneMean[:self.dyeFrontStart-15]
+        else:
+            self.laneMeanNoDye = self.laneMean
 
         # If the lane is a ladder then set additional attributes
         if self.description == 'ladder':
