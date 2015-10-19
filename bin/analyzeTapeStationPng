@@ -120,7 +120,7 @@ def summarizeDistributions(args, gel):
             ladderImg.append(ladder.lane)
             ladderImg.append(spacer)
         ladderImg.append(spacer)
-        ladderImg = np.column_stack(np.array(ladderImg))
+        ladderImg = np.column_stack(ladderImg)
         
         # Set MW
         MW = np.array(gel.ladders[0].MW)
