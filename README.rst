@@ -22,7 +22,7 @@ for use with this tool.
 Acquisition
 ~~~~~~~~~~~
 
-.. image:: http://raw.githubusercontent.com/jfear/tapeAnalyst/master/images/acquire_sample.PNG
+.. image: https://raw.githubusercontent.com/jfear/tapeAnalyst/master/images/acquire_sample.PNG
 
 When starting a tape station run, the user has the opportunity to add a 
 description for each sample (red box). These descriptions can be copied and 
