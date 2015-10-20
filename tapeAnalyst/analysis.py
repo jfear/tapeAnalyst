@@ -8,12 +8,14 @@ from io import BytesIO
 
 # 3rd Party
 import numpy as np
+from numpy.random import choice
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 import scipy.signal as signal
 import scipy.stats as stats
 from skimage import exposure
+from diptest.diptest import diptest as diptest
 
 
 def interpToMW(ladders):
@@ -170,12 +172,33 @@ def callValleys(lane, gain=7, hamming=5, filt=0.2, order=9):
     laneDist[laneDist < filt] = 0
 
     # Find local maxima
-    valleys = signal.argrelmin(laneDist, order=order)[0]
+    valleys = signal.argrelmin(laneDist)[0]
 
     return valleys
 
 
-def summaryStats(lane, peaks, valleys, molRange):
+def dip(peak):
+    """ Run a dip test. 
+
+    The diptest can be used to test if a distribution is unimodal. In order to
+    get it to work, I have to turn the peak signal into a distribution by
+    simulating, and then run the test on the simulated data. This is a little
+    hackish, there is probably a better/faster way.
+    
+    """
+    # Normalize the peak section to sum to 1
+    norm = peak / peak.sum()
+
+    # Simulate data from the peak distribution
+    sim = choice(np.arange(peak.shape[0]), p=norm, size=10000)
+
+    # Run diptest
+    test, pval = diptest(sim)
+
+    return test, pval
+
+
+def summaryStats(gel, lane, peaks, valleys, molRange):
     """ Calculate various summary stats based on distribution of peaks. 
     
     A good library should have 3 peaks. The two dyes and a middle peak that
@@ -190,14 +213,13 @@ def summaryStats(lane, peaks, valleys, molRange):
         iToMW = interpToMW(gel.ladders)
 
         # Convert peaks to molecular weights
-        peaksMW = interpToMW(peaks)
+        peaksMW = np.sort(iToMW(peaks))
 
         # Convert valleys to molecular weights
-        valleysMW = interpToMW(valleys)
+        valleysMW = np.sort(iToMW(valleys))
     else:
         peaksMW = None
         valleysMW = None
-
 
     if len(peaksMW) == 3:
         # If there are only 3 peaks, than distribution is unimodal.
@@ -208,45 +230,49 @@ def summaryStats(lane, peaks, valleys, molRange):
             if (peaksMW[1] < molRange).any() and (peaksMW[1] > molRange).any():
                 lane.flag.append('PEAKINRANGE')
 
-        # Try to find the valley surrounding main peak
-        leftValley = valleysMW[valleysMW < peaksMW[1]][-1]
-        RigthValley = valleysMW[valleysMW > peaksMW[1]][0]
+        try:
+            # Try to find the valley surrounding main peak
+            leftValley = int(valleys[valleysMW < peaksMW[1]][-1])
+            rightValley = int(valleys[valleysMW > peaksMW[1]][0])
+
+            # Slice peak for diptest
+            section = lane.laneMean[leftValley:rightValley]
+        except:
+            section = lane.laneMeanNoDye
+
+        # Run diptest for unimodality
+        dipTval, dipPval = dip(section)
 
         # Test for normality, I don't think the nature of the gel peaks
         # lends itself to normality assumptions. In general gels are left
         # skewed.
-        tests, pval = stats.shapiro(lane.laneMeanNoDye)
-        if pval > 0.05:
+        normTest, normPval = stats.shapiro(section)
+        if normPval > 0.05:
             lane.flag.append('NORMAL')
         else:
             lane.flag.append('NONORM')
     else:
         lane.flag.append('MULTIMODAL')
-        tests = np.nan
-        pval = np.nan
-        peakLoc = peaksMW[1:-1]
+        dipTval = np.nan
+        dipPval = np.nan
+        normTest = np.nan
+        normPval = np.nan
+        peakLoc = ';'.join([str(x) for x in peaksMW[1:-1]])
 
     # Summary stats for density excluding dyes
     if not 'NODYEEND' in lane.flag and not 'NODYEFRONT' in lane.flag:
         std = np.std(lane.laneMeanNoDye)
         skew = stats.skew(lane.laneMeanNoDye)
-        shapiro = '{} ({})'.format(np.round(tests, 3), pval)
+        dipTest = '{} ({})'.format(np.round(dipTval, 3), dipPval)
+        shapiro = '{} ({})'.format(np.round(normTest, 3), normPval)
 
         # Build table of stats
-        summaryStatsTable = pd.DataFrame([peakLoc, std, skew, shapiro],
-                index=['Peak(s) Molecular Weight', 'Std Dev', 'Skewness',
-                       'Normality Test (Shapiro-Wilk)'], columns=['Values'])
+        summaryStatsTable = pd.DataFrame([peakLoc, std, skew, dipTest, shapiro],
+                index=['Peak(s) Molecular Weight', 'Std Dev', 'Skewness', 'Diptest for Unimodality', 'Normality Test (Shapiro-Wilk)'], columns=['Values'])
 
-        # Test if main part of the distribution is in MW region
-        if molRange is not None:
-            if (mean < molRange).any() and (mean > molRange).any():
-                lane.flag.append('MEANINRANGE')
-            if (median < molRange).any() and (median > molRange).any():
-                lane.flag.append('MEDIANINRANGE')
     else:
         # Build empty table missing dyes
-        summaryStatsTable = pd.DataFrame(index=['Peak(s) Molecular Weight', 'Std Dev', 
-                                                'Skewness', 'Normality Test (Shapiro-Wilk)'], columns=['Values'])
+        summaryStatsTable = pd.DataFrame(index=['Peak(s) Molecular Weight', 'Std Dev', 'Skewness', 'Diptest for Unimodality', 'Normality Test (Shapiro-Wilk)'], columns=['Values'])
 
     return summaryStatsTable
 
@@ -300,7 +326,7 @@ def summarizeDistributions(args, gel):
         valleys = callValleys(lane, gain=args.gain, hamming=args.hamming, filt=args.filter, order=args.order)
 
         # Basic summary stats
-        summaryTable = summaryStats(lane, peaks, valleys, args.range)
+        summaryTable = summaryStats(gel, lane, peaks, valleys, args.range)
 
         # Generate Plot
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 4))
@@ -316,7 +342,11 @@ def summarizeDistributions(args, gel):
             ax2.axvline(peak, color='r', ls=':', lw=2)
 
         # If a range was given, highlight
-        if molRange is not None:
+        if args.range is not None:
+            # build interplater from MW to coordinates
+            iFromMW = interpFromMW(gel.ladders)
+            molRange = iFromMW(args.range)
+
             molStart = int(min(molRange))
             molEnd = int(max(molRange))
             ax2.fill_between(range(molStart, molEnd), 0, lane.laneMean[molStart:molEnd], color='g', alpha=0.3)
