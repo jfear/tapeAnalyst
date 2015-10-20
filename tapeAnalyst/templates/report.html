@@ -13,18 +13,20 @@
 {% endif %}
 
 {% for row in rows %}
-    <h2>Lane {{ row['index'] }}</h2>
-    <p><strong>Well ID:</strong> {{ row['wellID'] }}</p>
-    <p><strong>Description:</strong> {{ row['description'] }}</p>
-    <p class="flags"><strong>Flags:</strong> {{ row['flags'] }}</p>
+    <div class="lane">
+        <h2>Lane {{ row['index'] }}</h2>
+        <p><strong>Well ID:</strong> {{ row['wellID'] }}</p>
+        <p><strong>Description:</strong> {{ row['description'] }}</p>
+        <p class="flags"><strong>Flags:</strong> {{ row['flags'] }}</p>
 
-    {%if row['image'] != None %}
-        <img src="data:image/png;base64,{{ row['image'] }}"/>
-    {% endif %}
+        {%if row['image'] != None %}
+            <img src="data:image/png;base64,{{ row['image'] }}"/>
+        {% endif %}
 
-    {%if row['table'] != None %}
-        {{ row['table'] }}
-    {% endif %}
+        {%if row['table'] != None %}
+            {{ row['table'] }}
+        {% endif %}
+    </div>
 
 {% endfor %}
 {% endblock content %}
