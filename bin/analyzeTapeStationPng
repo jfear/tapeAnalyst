@@ -64,7 +64,7 @@ def importSampleSheet(fname):
             logger.error('Check formating of the formating of the sample sheet. ' +
                          'There should be 5 columns with columns for: \
                             * Well ID \
-                            * Conc. [pg/µl] \
+                            * Conc. [pg/ul] \
                             * Sample Description \
                             * Alert \
                             * Observations')
