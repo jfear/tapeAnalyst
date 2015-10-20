@@ -73,7 +73,7 @@ git clone https://github.com/jfear/tapeAnalyst.git
 You can run this before trying to run tapeAnalyst.
 
 ```bash
-echo "export PYTHONPATH = $PYTHONPATH:$HOME/devel/tapeAnalyst" >> ~/.profile
+export PYTHONPATH = $PYTHONPATH:$HOME/devel/tapeAnalyst
 ```
 
 Or you can make the change to your .profile or .bashrc to make the change 
