@@ -156,12 +156,12 @@ def summaryStats(lane, peaks, molRange):
         mode = stats.mode(lane.laneMeanNoDye)[0][0]
         std = np.std(lane.laneMeanNoDye)
         skew = stats.skew(lane.laneMeanNoDye)
-        shapiro = '{} ({})'.format(np.round(tests, 3), np.round(pval, 4))
+        shapiro = '{} ({})'.format(np.round(tests, 3), pval)
 
         # Build table of stats
         summaryStatsTable = pd.DataFrame([mean, median, mode, std, skew, shapiro],
                 index=['Mean', 'Median', 'Mode', 'Std Dev', 'Skewness',
-                       'Shapiro-Wilk'], columns=['Values'])
+                       'Normality Test (Shapiro-Wilk)'], columns=['Values'])
 
         # Test if main part of the distribution is in MW region
         if molRange is not None:
@@ -172,7 +172,7 @@ def summaryStats(lane, peaks, molRange):
     else:
         # Build empty table missing dyes
         summaryStatsTable = pd.DataFrame(index=['Mean', 'Median', 'Mode', 'Std Dev', 
-                                                'Skewness', 'Shapiro-Wilk'], columns=['Values'])
+                                                'Skewness', 'Normality Test (Shapiro-Wilk)'], columns=['Values'])
 
     return summaryStatsTable
 
