@@ -291,11 +291,11 @@ class GelLane():
 
         # Make a filtered distribution excluding the Dyes
         if self.dyeEndEnd and self.dyeFrontStart:
-            self.laneMeanNoDye = self.laneMean[self.dyeEndEnd+15:self.dyeFrontStart-15]
+            self.laneMeanNoDye = self.laneMean[self.dyeEndEnd+20:self.dyeFrontStart-20]
         elif self.dyeEndEnd:
-            self.laneMeanNoDye = self.laneMean[self.dyeEndEnd+15:]
+            self.laneMeanNoDye = self.laneMean[self.dyeEndEnd+20:]
         elif self.dyeFrontStart:
-            self.laneMeanNoDye = self.laneMean[:self.dyeFrontStart-15]
+            self.laneMeanNoDye = self.laneMean[:self.dyeFrontStart-20]
         else:
             self.laneMeanNoDye = self.laneMean
 

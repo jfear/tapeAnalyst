@@ -240,9 +240,6 @@ def summaryStats(gel, lane, peaks, valleys, molRange):
         except:
             section = lane.laneMeanNoDye
 
-        # Run diptest for unimodality
-        dipTval, dipPval = dip(section)
-
         # Test for normality, I don't think the nature of the gel peaks
         # lends itself to normality assumptions. In general gels are left
         # skewed.
@@ -252,15 +249,22 @@ def summaryStats(gel, lane, peaks, valleys, molRange):
         else:
             lane.flag.append('NONORM')
     else:
+        section = None
         lane.flag.append('MULTIMODAL')
-        dipTval = np.nan
-        dipPval = np.nan
         normTest = np.nan
         normPval = np.nan
         peakLoc = ';'.join([str(x) for x in peaksMW[1:-1]])
 
-    # Summary stats for density excluding dyes
+
+    # Only run stats is both dye fronts are present
     if not 'NODYEEND' in lane.flag and not 'NODYEFRONT' in lane.flag:
+        # Run diptest for unimodality
+        if section is not None:
+            dipTval, dipPval = dip(section)
+        else:
+            dipTval, dipPval = dip(lane.laneMeanNoDye)
+
+        # Basic stats
         std = np.std(lane.laneMeanNoDye)
         skew = stats.skew(lane.laneMeanNoDye)
         dipTest = '{} ({})'.format(np.round(dipTval, 3), dipPval)
