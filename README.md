@@ -58,11 +58,45 @@ make sure the gel image is also listed here before export.
 Installation
 ------------
 
-Installation script has not been completed. You can just clone the
-library and add its location to PYTHONPATH.
+Installation script has not been completed. For now you can do the following. 
+
+### Clone the Repository
+
+```bash
+mkdir $HOME/devel
+cd $HOME/devel
+git clone https://github.com/jfear/tapeAnalyst.git
+```
+
+### Add directory to your `PYTHONPATH`
+
+You can run this before trying to run tapeAnalyst.
+
+```bash
+echo "export PYTHONPATH = $PYTHONPATH:$HOME/devel/tapeAnalyst" >> ~/.profile
+```
+
+Or you can make the change to your .profile or .bashrc to make the change 
+permanent. 
+
+```bash
+echo "export PYTHONPATH = $PYTHONPATH:$HOME/devel/tapeAnalyst" >> ~/.profile
+```
+    
+### Install Dependencies
+
+```bash
+cd $HOME/devel/tapeAnalyst
+make install
+```
 
 Usage
 -----
 
 tapeAnalyst is a basic command line tool. See command line options for
 more details by running the tool with -h.
+
+```bash
+cd $HOME/devel/tapeAnalyst/bin
+analyzeTapeStationPng -h
+```
