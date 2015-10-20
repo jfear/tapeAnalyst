@@ -118,7 +118,64 @@ def callPeaks(lane, gain=7, hamming=5, filt=0.2, order=9):
     return peaks
 
 
-def summaryStats(lane, peaks, molRange):
+def callValleys(lane, gain=7, hamming=5, filt=0.2, order=9):
+    """ Identify vallies in the lane 
+    
+    :Args:
+        :param lane: The lane which to call valleys.
+        :type lane: tapeAnalyst.gel_processing.GelLane
+
+        :param gain: The gain value to use for increasing contrast (see
+            skimage.exposure.adjust_sigmoid)
+        :type gain: int
+
+        :param hamming: The value to use Hamming convolution (see
+            scipy.signal.hamming)
+        :type gain: int
+
+        :param filt: Remove all pixels whose intensity is below this value.
+        :type filt: float
+
+        :param order: The distance allowed for finding maxima (see scipy.signal.argrelmax)
+        :type order: int
+
+    """
+    # Increase contrast to help with peak calling
+    ladj = exposure.adjust_sigmoid(lane.lane, cutoff=0.5, gain=gain)
+
+    # Tack the max pixel intensity for each row in then lane's gel image.
+    laneDist = ladj.max(axis=1)
+
+    # Smooth the distribution
+    laneDist = signal.convolve(laneDist, signal.hamming(hamming))
+
+    # Get the locations of the dye front and dye end. Peak calling is difficult
+    # here because dyes tend to plateau. To aid peak calling, add an artificial
+    # spike in dye regions. Also remove all peaks outside of the dyes
+    try:
+        dyeFrontPeak = int(np.ceil(np.mean([lane.dyeFrontStart, lane.dyeFrontEnd])))
+        laneDist[dyeFrontPeak] = laneDist[dyeFrontPeak] + 2
+        laneDist[dyeFrontPeak+1:] = 0
+    except:
+        logger.warn('No Dye Front - Lane {}: {}'.format(lane.index, lane.wellID))
+
+    try:
+        dyeEndPeak = int(np.ceil(np.mean([lane.dyeEndStart, lane.dyeEndEnd])))
+        laneDist[dyeEndPeak] = laneDist[dyeEndPeak] + 2
+        laneDist[:dyeEndPeak-1] = 0
+    except:
+        logger.warn('No Dye End - Lane {}: {}'.format(lane.index, lane.wellID))
+
+    # Filter out low levels
+    laneDist[laneDist < filt] = 0
+
+    # Find local maxima
+    valleys = signal.argrelmin(laneDist, order=order)[0]
+
+    return valleys
+
+
+def summaryStats(lane, peaks, valleys, molRange):
     """ Calculate various summary stats based on distribution of peaks. 
     
     A good library should have 3 peaks. The two dyes and a middle peak that
@@ -127,14 +184,33 @@ def summaryStats(lane, peaks, molRange):
     determine if approximately normal.
     
     """
-    if len(peaks) == 3:
+    # Covert coordinates to molecular weights
+    if gel.ladders is not None:
+        # Iterpolate from coordinates to MW
+        iToMW = interpToMW(gel.ladders)
+
+        # Convert peaks to molecular weights
+        peaksMW = interpToMW(peaks)
+
+        # Convert valleys to molecular weights
+        valleysMW = interpToMW(valleys)
+    else:
+        peaksMW = None
+        valleysMW = None
+
+
+    if len(peaksMW) == 3:
         # If there are only 3 peaks, than distribution is unimodal.
         lane.flag.append('UNIMODAL')
+        peakLoc = peaksMW[1]
 
-        # See if the peak is in my molecular range
         if molRange is not None:
-            if (peaks[1] < molRange).any() and (peaks[1] > molRange).any():
+            if (peaksMW[1] < molRange).any() and (peaksMW[1] > molRange).any():
                 lane.flag.append('PEAKINRANGE')
+
+        # Try to find the valley surrounding main peak
+        leftValley = valleysMW[valleysMW < peaksMW[1]][-1]
+        RigthValley = valleysMW[valleysMW > peaksMW[1]][0]
 
         # Test for normality, I don't think the nature of the gel peaks
         # lends itself to normality assumptions. In general gels are left
@@ -148,19 +224,17 @@ def summaryStats(lane, peaks, molRange):
         lane.flag.append('MULTIMODAL')
         tests = np.nan
         pval = np.nan
+        peakLoc = peaksMW[1:-1]
 
     # Summary stats for density excluding dyes
     if not 'NODYEEND' in lane.flag and not 'NODYEFRONT' in lane.flag:
-        mean = np.mean(lane.laneMeanNoDye)
-        median = np.median(lane.laneMeanNoDye)
-        mode = stats.mode(lane.laneMeanNoDye)[0][0]
         std = np.std(lane.laneMeanNoDye)
         skew = stats.skew(lane.laneMeanNoDye)
         shapiro = '{} ({})'.format(np.round(tests, 3), pval)
 
         # Build table of stats
-        summaryStatsTable = pd.DataFrame([mean, median, mode, std, skew, shapiro],
-                index=['Mean', 'Median', 'Mode', 'Std Dev', 'Skewness',
+        summaryStatsTable = pd.DataFrame([peakLoc, std, skew, shapiro],
+                index=['Peak(s) Molecular Weight', 'Std Dev', 'Skewness',
                        'Normality Test (Shapiro-Wilk)'], columns=['Values'])
 
         # Test if main part of the distribution is in MW region
@@ -171,7 +245,7 @@ def summaryStats(lane, peaks, molRange):
                 lane.flag.append('MEDIANINRANGE')
     else:
         # Build empty table missing dyes
-        summaryStatsTable = pd.DataFrame(index=['Mean', 'Median', 'Mode', 'Std Dev', 
+        summaryStatsTable = pd.DataFrame(index=['Peak(s) Molecular Weight', 'Std Dev', 
                                                 'Skewness', 'Normality Test (Shapiro-Wilk)'], columns=['Values'])
 
     return summaryStatsTable
@@ -202,14 +276,6 @@ def summarizeDistributions(args, gel):
     spacer = np.zeros((gel.grayGel.shape[0], 10))
 
     if gel.ladders is not None:
-        # If a MW range is provided need to construct an interperlator to go
-        # from MW to coordinates.
-        if args.range is not None:
-            iFromMW = interpFromMW(gel.ladders)
-            molRange = np.ceil(iFromMW(args.range))
-        else:
-            molRange = None
-
         # Build a 'gel' image will all of the ladder lanes put together.
         ladderImg = list()
         ladderImg.append(spacer)
@@ -223,7 +289,6 @@ def summarizeDistributions(args, gel):
         MW = np.array(gel.ladders[0].MW)
     else:
         MW = None
-        molRange = None
 
     # Iterate over each lane and summarize
     results = list()
@@ -231,8 +296,11 @@ def summarizeDistributions(args, gel):
         # Call peaks for each lane
         peaks = callPeaks(lane, gain=args.gain, hamming=args.hamming, filt=args.filter, order=args.order)
 
+        # Call valleys for each lane
+        valleys = callValleys(lane, gain=args.gain, hamming=args.hamming, filt=args.filter, order=args.order)
+
         # Basic summary stats
-        summaryTable = summaryStats(lane, peaks, molRange)
+        summaryTable = summaryStats(lane, peaks, valleys, args.range)
 
         # Generate Plot
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 4))
@@ -240,6 +308,7 @@ def summarizeDistributions(args, gel):
         # Gel Image
         img = np.column_stack([spacer, lane.lane, spacer, spacer, ladderImg])
         ax1.imshow(img, cmap='Greys')
+        ax1.get_xaxis().set_visible(False)
 
         # Density Plot
         ax2.plot(lane.laneMean, color='k')
