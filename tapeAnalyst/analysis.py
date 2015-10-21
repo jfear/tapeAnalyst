@@ -177,7 +177,7 @@ def callValleys(lane, gain=7, hamming=5, filt=0.2, order=9):
     return valleys
 
 
-def dip(peak):
+def dip(peak, smooth=True):
     """ Run a dip test. 
 
     The diptest can be used to test if a distribution is unimodal. In order to
@@ -186,11 +186,21 @@ def dip(peak):
     hackish, there is probably a better/faster way.
     
     """
+
+    # Smooth distribution using hamming
+    if smooth:
+        smooth = signal.convolve(peak, signal.hamming(10))
+    else:
+        smooth = peak
+
+    # Set up x's
+    x_grid = np.arange(0, smooth.shape[0])
+
     # Normalize the peak section to sum to 1
-    norm = peak / peak.sum()
+    norm = smooth / smooth.sum()
 
     # Simulate data from the peak distribution
-    sim = choice(np.arange(peak.shape[0]), p=norm, size=10000)
+    sim = choice(x_grid, size=3000, replace=True, p=norm)
 
     # Run diptest
     test, pval = diptest(sim)
@@ -207,7 +217,7 @@ def summaryStats(gel, lane, peaks, valleys, molRange):
     determine if approximately normal.
     
     """
-    # Covert coordinates to molecular weights
+    # If ladder then covert coordinates to molecular weights
     if gel.ladders is not None:
         # Iterpolate from coordinates to MW
         iToMW = interpToMW(gel.ladders)
@@ -221,62 +231,65 @@ def summaryStats(gel, lane, peaks, valleys, molRange):
         peaksMW = None
         valleysMW = None
 
-    if len(peaksMW) == 3:
-        # If there are only 3 peaks, than distribution is unimodal.
-        lane.flag.append('UNIMODAL')
-        peakLoc = peaksMW[1]
-
-        if molRange is not None:
-            if (peaksMW[1] < molRange).any() and (peaksMW[1] > molRange).any():
-                lane.flag.append('PEAKINRANGE')
-
-        try:
-            # Try to find the valley surrounding main peak
-            leftValley = int(valleys[valleysMW < peaksMW[1]][-1])
-            rightValley = int(valleys[valleysMW > peaksMW[1]][0])
-
-            # Slice peak for diptest
-            section = lane.laneMean[leftValley:rightValley]
-        except:
-            section = lane.laneMeanNoDye
-
-        # Test for normality, I don't think the nature of the gel peaks
-        # lends itself to normality assumptions. In general gels are left
-        # skewed.
-        normTest, normPval = stats.shapiro(section)
-        if normPval > 0.05:
-            lane.flag.append('NORMAL')
-        else:
-            lane.flag.append('NONORM')
-    else:
-        section = None
-        lane.flag.append('MULTIMODAL')
-        normTest = np.nan
-        normPval = np.nan
-        peakLoc = ';'.join([str(x) for x in peaksMW[1:-1]])
-
-
-    # Only run stats is both dye fronts are present
+    # If both dyes are present
     if not 'NODYEEND' in lane.flag and not 'NODYEFRONT' in lane.flag:
-        # Run diptest for unimodality
-        if section is not None:
-            dipTval, dipPval = dip(section)
+        # Remove the dye front and end peaks before analysis
+        dyeEnd = lane.dyeEndEnd
+        dyeFront = lane.dyeFrontStart
+
+        leftValley = valleys[np.nonzero(valleys > dyeEnd)[0][0]]
+        rightValley = valleys[np.nonzero(valleys < dyeFront)[0][-1]]
+        section = lane.laneMean[leftValley:rightValley]
+
+        # Test for unimodality using dip test
+        dipTval, dipPval = dip(section)
+        dipTest = '{} ({})'.format(np.round(dipTval, 3), dipPval)
+        if dipPval > 0.001:
+            lane.flag.append('UNIMODAL')
         else:
-            dipTval, dipPval = dip(lane.laneMeanNoDye)
+            lane.flag.append('MULTIMODAL')
+
+        # Test for Normality using shapiro-wilk
+        normTval, normPval = stats.shapiro(section)
+        normTest = '{} ({})'.format(np.round(normTval, 3), normPval)
+        if normPval <= 0.05:
+            lane.flag.append('NONNORMAL')
+        else:
+            lane.flag.append('NORMAL')
+
+        # Flag if single peak was called
+        if len(peaksMW) == 3:
+            lane.flag.append('SINGLEPEAK')
+
+            # If a range is given, test if peak is the range.
+            if len(peaksMW) == 3 and molRange is not None:
+                peakLoc = peaksMW[1]
+                if (peakLoc < molRange).any() and (peakLoc > molRange).any():
+                    lane.flag.append('PEAKINRANGE')
+                else:
+                    lane.flag.append('PEAKNOTINRANGE')
+            else:
+                peakLoc = np.nan
+        else:
+            lane.flag.append('MULTIPEAK')
+            peakLoc = np.nan
 
         # Basic stats
         std = np.std(lane.laneMeanNoDye)
         skew = stats.skew(lane.laneMeanNoDye)
-        dipTest = '{} ({})'.format(np.round(dipTval, 3), dipPval)
-        shapiro = '{} ({})'.format(np.round(normTest, 3), normPval)
 
         # Build table of stats
-        summaryStatsTable = pd.DataFrame([peakLoc, std, skew, dipTest, shapiro],
-                index=['Peak(s) Molecular Weight', 'Std Dev', 'Skewness', 'Diptest for Unimodality', 'Normality Test (Shapiro-Wilk)'], columns=['Values'])
-
+        summaryStatsTable = pd.DataFrame([peakLoc, std, skew, dipTest, normTest],
+                                          index=['Peak(s) Molecular Weight', 'Std Dev', 
+                                                 'Skewness', 'Diptest for Unimodality', 
+                                                 'Normality Test (Shapiro-Wilk)'], 
+                                          columns=['Values'])
     else:
-        # Build empty table missing dyes
-        summaryStatsTable = pd.DataFrame(index=['Peak(s) Molecular Weight', 'Std Dev', 'Skewness', 'Diptest for Unimodality', 'Normality Test (Shapiro-Wilk)'], columns=['Values'])
+        # Build empty table if missing dyes
+        summaryStatsTable = pd.DataFrame(index=['Peak(s) Molecular Weight', 'Std Dev', 
+                                                'Skewness', 'Diptest for Unimodality', 
+                                                'Normality Test (Shapiro-Wilk)'], 
+                                         columns=['Values'])
 
     return summaryStatsTable
 
@@ -305,8 +318,8 @@ def summarizeDistributions(args, gel):
     # Generate a spacer for plotting later.
     spacer = np.zeros((gel.grayGel.shape[0], 10))
 
+    # Build a 'gel' image with all of the ladder lanes put together.
     if gel.ladders is not None:
-        # Build a 'gel' image will all of the ladder lanes put together.
         ladderImg = list()
         ladderImg.append(spacer)
         for ladder in gel.ladders:
@@ -318,6 +331,7 @@ def summarizeDistributions(args, gel):
         # Set MW
         MW = np.array(gel.ladders[0].MW)
     else:
+        ladderImg = None
         MW = None
 
     # Iterate over each lane and summarize
@@ -327,7 +341,7 @@ def summarizeDistributions(args, gel):
         peaks = callPeaks(lane, gain=args.gain, hamming=args.hamming, filt=args.filter, order=args.order)
 
         # Call valleys for each lane
-        valleys = callValleys(lane, gain=args.gain, hamming=args.hamming, filt=args.filter, order=args.order)
+        valleys = callValleys(lane, gain=args.gain, hamming=50)
 
         # Basic summary stats
         summaryTable = summaryStats(gel, lane, peaks, valleys, args.range)
