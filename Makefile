@@ -1,6 +1,6 @@
 install:
-	pip install -r requirements.txt
-	pip install git+https://github.com/alimuldal/diptest.git
+	pip install -r requirements.txt --user
+	pip install git+https://github.com/alimuldal/diptest.git --user
 
 run:
 	python ./bin/analyzeTapeStationPng \
