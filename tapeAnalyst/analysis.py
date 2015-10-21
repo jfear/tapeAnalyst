@@ -33,12 +33,12 @@ def interpToMW(ladders):
     """
     # Get vector of gel locations by averaging MW locations across
     # ladders
-    x = np.array(ladders[0].MW)[:, 0]
-    y = np.array(ladders[0].MW)[:, 1]
+    x = np.sort(np.array(ladders[0].MW)[:, 0])
+    y = np.sort(np.array(ladders[0].MW)[:, 1])[::-1]
 
     # Build interpolation function to estimate MW for any position
     # value. MWs are logarithmic, use a quadratic function.
-    return interp1d(x, y, kind='quadratic', bounds_error=False)
+    return interp1d(x, y, bounds_error=False)
 
 
 def interpFromMW(ladders):
@@ -60,7 +60,7 @@ def interpFromMW(ladders):
     y = np.array(ladders[0].MW)[:, 0]
 
     # Build interpolation function to estimate coordinate from MW.
-    return interp1d(x, y, kind='quadratic', bounds_error=False)
+    return interp1d(x, y, bounds_error=False)
 
 
 def callPeaks(lane, gain=7, hamming=5, filt=0.2, order=9):
@@ -223,7 +223,7 @@ def summaryStats(gel, lane, peaks, valleys, molRange):
         iToMW = interpToMW(gel.ladders)
 
         # Convert peaks to molecular weights
-        peaksMW = np.sort(iToMW(peaks))
+        peaksMW = iToMW(peaks)
 
         # Convert valleys to molecular weights
         valleysMW = np.sort(iToMW(valleys))
