@@ -17,7 +17,8 @@ def getOptions():
     parser = argparse.ArgumentParser(description='A tool to analyze image output from the Agilent Tape Station 2200.')
     parser.add_argument('--gel', dest='gname', action='store', required=True, help='A PNG file containing the gel output from the TapeStations 2200 [Required].')
     parser.add_argument('--sample', dest='sname', action='store', required=True, help='A CSV file containing sample information from the TapeStations 2200 [Required].')
-    parser.add_argument('-o', '--output', dest='oname', action='store', required=True, help='The name of HTML output file [Required].')
+    parser.add_argument('-r', '--report_name', dest='rname', action='store', required=True, help='The name of HTML output file [Required].')
+    parser.add_argument('-t', '--table_name', dest='tname', action='store', required=True, help='The name of TSV output file [Required].')
     parser.add_argument('--range', dest='range', action='store', required=False, default=None, nargs=2, type=int, help='Range for fragment size for doing quality assesment in the form of "start end".')
     parser.add_argument('--gain', dest='gain', action='store', required=False, default=7, type=int, help='The gain value to use for increasing contrast (see skimage.exposure.adjust_sigmoid)')
     parser.add_argument('--hamming', dest='hamming', action='store', required=False, default=5, type=int, help='The value to use Hamming convolution (see scipy.signal.hamming)') 
@@ -81,14 +82,17 @@ def main(args):
     gel = gp.TapeStationGel(args.gname, dfSample)
 
     # Summarize distributions
-    summary = analysis.summarizeDistributions(args, gel)
+    summary, summary_table = analysis.summarizeDistributions(args, gel)
     
     # make image of the original gel
     gelFig64 = analysis.fullGelImage(gel)
 
     # Generate and output HTML report
     html = reporting.HtmlReport(gelFig64, summary, args.range)
-    html.write(args.oname)
+    html.write(args.rname)
+
+    # Write summary table
+    summary_table.to_csv(args.tname, sep='\t', index=False)
 
 
 if __name__ == '__main__':

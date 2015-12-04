@@ -336,6 +336,7 @@ def summarizeDistributions(args, gel):
 
     # Iterate over each lane and summarize
     results = list()
+    result_table = list()
     for lane in gel.lanes:
         # Call peaks for each lane
         peaks = callPeaks(lane, gain=args.gain, hamming=args.hamming, filt=args.filter, order=args.order)
@@ -383,7 +384,15 @@ def summarizeDistributions(args, gel):
                         'wellID': lane.wellID, 'description': lane.description,
                         'table': summaryTable.to_html(), 'index': lane.index})
 
-    return results
+        for flag in lane.flag:
+            result_table.append([lane.wellID, lane.description, flag, '1'])
+
+    # format output table so flags are column names with 0|1
+    df = pd.DataFrame(result_table, columns=['wellID', 'description', 'flagName', 'flagOn'])
+    flip = df.pivot(values='flagOn', columns='flagName', index='wellID').fillna('0')
+    merged = df[['wellID', 'description']].merge(flip, left_on='wellID', right_index=True)
+
+    return results, merged
             
 
 def fullGelImage(gel):
