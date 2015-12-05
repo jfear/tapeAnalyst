@@ -385,12 +385,12 @@ def summarizeDistributions(args, gel):
                         'table': summaryTable.to_html(), 'index': lane.index})
 
         for flag in lane.flag:
-            result_table.append([lane.wellID, lane.description, flag, '1'])
+            result_table.append([lane.wellID, lane.description, flag, '1', summaryTable.loc['Peak(s) Molecular Weight'].values[0]])
 
     # format output table so flags are column names with 0|1
-    df = pd.DataFrame(result_table, columns=['wellID', 'description', 'flagName', 'flagOn'])
+    df = pd.DataFrame(result_table, columns=['wellID', 'description', 'flagName', 'flagOn', 'Peak(s) Molecular Weight'])
     flip = df.pivot(values='flagOn', columns='flagName', index='wellID').fillna('0')
-    merged = df[['wellID', 'description']].merge(flip, left_on='wellID', right_index=True)
+    merged = df[['wellID', 'description', 'Peak(s) Molecular Weight']].merge(flip, left_on='wellID', right_index=True)
 
     return results, merged
             
