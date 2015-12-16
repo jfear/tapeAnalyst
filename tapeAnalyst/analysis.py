@@ -392,7 +392,7 @@ def summarizeDistributions(args, gel):
     flip = df.pivot(values='flagOn', columns='flagName', index='wellID').fillna('0')
     merged = df[['wellID', 'description', 'Peak(s) Molecular Weight']].merge(flip, left_on='wellID', right_index=True)
 
-    return results, merged
+    return results, merged.drop_duplicates('wellID')
             
 
 def fullGelImage(gel):
