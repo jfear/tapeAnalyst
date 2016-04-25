@@ -12,4 +12,5 @@ setup(
     description = 'A utility to analysze images from the Agilent Tapestation and generate a set of metrics.',
     packages=['tapeAnalyst', 'tapeAnalyst.templates', 'bin'],
     scripts = ['bin/analyzeTapeStationPng'],
+    packages_data={'tapeAnalyst': 'tapeAnalyst/templates/*'}
 )
