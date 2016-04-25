@@ -10,7 +10,8 @@ setup(
     author = 'Justin Fear',
     author_email = 'fearjm@nih.gov',
     description = 'A utility to analysze images from the Agilent Tapestation and generate a set of metrics.',
-    packages=['tapeAnalyst', 'tapeAnalyst.templates', 'bin'],
+    packages=['tapeAnalyst'],
+    package_dir={'tapeAnalyst': 'tapeAnalyst'},
+    package_data={'tapeAnalyst': ['templates/*.html']},
     scripts = ['bin/analyzeTapeStationPng'],
-    packages_data={'tapeAnalyst': 'tapeAnalyst/templates/*'}
 )
